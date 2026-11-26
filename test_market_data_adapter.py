@@ -143,3 +143,28 @@ def test_dash_symbols_map_to_alpaca_convention(mod, tmp_path):
 def test_index_symbols_return_empty(mod, tmp_path):
     md = mod.MarketData(cache_path=str(tmp_path / "bars.db"))
     assert md.daily_bars("^GSPC", 5) == []
+
+
+def test_paid_feed_falls_back_to_iex_on_403(mod, tmp_path):
+    expected = mod.expected_latest_session()
+    calls = []
+
+    def fake_fetch(path, params):
+        calls.append(params.get("feed"))
+        if params.get("feed") == "sip":
+            instance.last_error = "HTTP 403"
+            return None
+        return {"bars": {s: make_bars(mod, expected) for s in params["symbols"].split(",")}}
+
+    instance = mod.MarketData(cache_path=str(tmp_path / "bars.db"), feed="sip", fetch=fake_fetch)
+    rows = instance.daily_bars("AAPL", 5)
+    assert len(rows) == 5
+    assert calls == ["sip", "iex"]  # refused once, then degraded and sticky
+    assert instance._feed_locked is True
+    # Subsequent calls skip the refused feed entirely.
+    calls.clear()
+    rows2 = instance.daily_bars("AAPL", 5)
+    assert len(rows2) == 5
+    assert calls == []  # cache hit, nothing fetched
+    instance.daily_bars("MSFT", 5)
+    assert calls == ["iex"]  # sticky: never retries sip

@@ -94,10 +94,11 @@ class MarketData:
         api_secret: Optional[str] = None,
     ):
         self.cache_path = (cache_path or os.getenv("MARKET_CACHE_PATH") or "").strip()
-        self.feed = (feed or os.getenv("ALPACA_DATA_FEED") or "iex").strip().lower()
+        self.feed = (feed or os.getenv("ALPACA_DATA_FEED") or "sip").strip().lower()
         self.api_key = (api_key or os.getenv("ALPACA_API_KEY") or "").strip()
         self.api_secret = (api_secret or os.getenv("ALPACA_SECRET_KEY") or "").strip()
         self._fetch = fetch  # injectable transport (tests); default = _http_get
+        self._feed_locked = False  # True once the paid feed was refused (403)
         self.api_calls = 0
         self.last_error: Optional[str] = None
 
@@ -123,7 +124,23 @@ class MarketData:
     def _get(self, path: str, params: dict) -> Optional[dict]:
         self.last_error = None
         transport = self._fetch or self._http_get
-        return transport(path, params)
+        if self._feed_locked and params.get("feed") and params["feed"] != "iex":
+            params = {**params, "feed": "iex"}
+        data = transport(path, params)
+        if (
+            data is None
+            and "403" in (self.last_error or "")
+            and self.feed != "iex"
+            and not self._feed_locked
+        ):
+            # Paid feed not entitled for this key: transparently degrade to
+            # IEX and stick to it for the process lifetime so all fetched
+            # rows keep one consistent tape.
+            self._feed_locked = True
+            self.last_error = f"feed '{self.feed}' not entitled (403); falling back to 'iex'"
+            params = {**params, "feed": "iex"}
+            data = transport(path, params)
+        return data
 
     # -- cache ----------------------------------------------------------------
     def _connect(self):

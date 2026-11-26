@@ -33,7 +33,7 @@ quote = md.MarketData().quote("AAPL")                # snapshots, never cached
 | Variable | Meaning |
 | --- | --- |
 | `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` | Alpaca credentials |
-| `ALPACA_DATA_FEED` | `iex` (default, free plans) or `sip` (paid, full volume) |
+| `ALPACA_DATA_FEED` | `sip` (default; full consolidated tape when entitled) or `iex` (free plans). A 403 on SIP auto-degrades to `iex` for the process lifetime |
 | `MARKET_CACHE_PATH` | SQLite cache file (default `/mnt/shared/hermes/market-data/bars.db`) |
 | `MARKET_DATA_ADAPTER` | full path consumers put in their env to find this module |
 
