@@ -235,6 +235,18 @@ class MarketData:
             return {}
         today = _et_now()
         end_date = today.date().isoformat() if today else date.today().isoformat()
+        try:
+            completed = expected_latest_session()
+        except Exception:
+            completed = ""
+        if completed:
+            # SIP entitlement on non-realtime keys: any request whose end
+            # reaches into the live session is refused (403). Daily bars
+            # only ever contain completed sessions anyway (this code path
+            # also strips them), so clamp end to the last completed
+            # session — this keeps full SIP volume even during market
+            # hours without triggering the 403 fallback to IEX.
+            end_date = min(end_date, completed)
         start_date = (
             today.date() - timedelta(days=max(wanted.values()) * 2 + 5)
         ).isoformat() if today else (date.today() - timedelta(days=505)).isoformat()

@@ -168,3 +168,17 @@ def test_paid_feed_falls_back_to_iex_on_403(mod, tmp_path):
     assert calls == []  # cache hit, nothing fetched
     instance.daily_bars("MSFT", 5)
     assert calls == ["iex"]  # sticky: never retries sip
+
+
+def test_bar_end_clamped_to_last_completed_session_sip_ok(mod, tmp_path):
+    expected = mod.expected_latest_session()
+    seen = []
+
+    def fake_fetch(path, params):
+        seen.append(params)
+        return {"bars": {s: make_bars(mod, params["end"], count=10) for s in params["symbols"].split(",")}}
+
+    md = mod.MarketData(cache_path=str(tmp_path / "bars.db"), fetch=fake_fetch)
+    md.daily_bars("PLD", 5)
+    assert seen[0]["end"] == expected  # never reaches into the live session
+    assert seen[0]["feed"] == "sip"    # full-tape fetch, no 403 fallback needed
